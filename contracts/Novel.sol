@@ -20,12 +20,8 @@ contract Novel is ReentrancyGuard, AccessControl, GroupApp {
     // greenfield system contracts
     address public constant _CROSS_CHAIN = 0x57b8A375193b2e9c6481f167BaECF1feEf9F7d4B;
     address public constant _GROUP_HUB = 0x0Bf7D3Ed3F777D7fB8D65Fb21ba4FBD9F584B579;
-    address public constant _BUCKET_HUB = 0x0Bf7D3Ed3F777D7fB8D65Fb21ba4FBD9F584B579;
-
     address public constant _GROUP_TOKEN = 0x089AFF7964E435eB2C7b296B371078B18E2C9A35;
     address public constant _MEMBER_TOKEN = 0x80Dd11998159cbea4BF79650fCc5Da72Ffb51EFc;
-    address public constant _BUCKET_TOKEN = 0x089AFF7964E435eB2C7b296B371078B18E2C9A35;
-
     /*----------------- storage -----------------*/
     // owner group ID of novel bucket => NovelInfo
     mapping(uint256 => NovelInfo) public novels;
@@ -47,8 +43,8 @@ contract Novel is ReentrancyGuard, AccessControl, GroupApp {
     }
 
     /*----------------- event/modifier -----------------*/
-    event CreateNovelSuccess(address indexed owner, uint256 indexed bucketId, string name);
-    event List(address indexed owner, uint256 indexed bucketId, uint256 indexed groupId, uint256 price);
+    event CreateNovelSuccess(address indexed owner, uint256 indexed novelGroupId, string name);
+    event List(address indexed owner, uint256 indexed novelGroupId, uint256 indexed groupId, uint256 price);
     event Delist(address indexed owner, uint256 indexed groupId);
     event Buy(address indexed buyer, uint256 indexed groupId);
     event BuyFailed(address indexed buyer, uint256 indexed groupId);
@@ -59,13 +55,8 @@ contract Novel is ReentrancyGuard, AccessControl, GroupApp {
         _;
     }
 
-    modifier onlyBucketOwner(uint256 bucketId) {
-        require(msg.sender == IERC721NonTransferable(_BUCKET_TOKEN).ownerOf(bucketId), "Novel: only bucket owner");
-        _;
-    }
-
-    modifier onlyNovelExist(uint256 bucketId) {
-        require(bytes(novels[bucketId].name).length > 0, "Novel: not exists");
+    modifier onlyNovelExist(uint256 novelGroupId) {
+        require(bytes(novels[novelGroupId].name).length > 0, "Novel: not exists");
         _;
     }
 
@@ -104,32 +95,32 @@ contract Novel is ReentrancyGuard, AccessControl, GroupApp {
         }
     }
 
-    function createNovel(uint256 bucketId, string memory name) external onlyBucketOwner(bucketId) {
-        require(bytes(novels[bucketId].name).length == 0, "Novel: already exists");
+    function createNovel(uint256 novelGroupId, string memory name) external onlyGroupOwner(novelGroupId) {
+        require(bytes(novels[novelGroupId].name).length == 0, "Novel: already exists");
         require(bytes(name).length > 0, "Novel: empty novel name");
-        novels[bucketId].name = name;
+        novels[novelGroupId].name = name;
 
-        emit CreateNovelSuccess(msg.sender, bucketId, name);
+        emit CreateNovelSuccess(msg.sender, novelGroupId, name);
     }
 
-    function listChapters(uint256 bucketId, uint256[] calldata chapterGroupIds, uint256[] calldata priceList) external {
+    function listChapters(uint256 novelGroupId, uint256[] calldata chapterGroupIds, uint256[] calldata priceList) external {
         require(chapterGroupIds.length == priceList.length, "Novel: length mismatch");
         require(chapterGroupIds.length > 0, "Novel: empty list");
 
         for (uint256 i = 0; i < chapterGroupIds.length; ++i) {
-            listChapter(bucketId, chapterGroupIds[i], prices[i]);
+            listChapter(novelGroupId, chapterGroupIds[i], prices[i]);
         }
     }
 
-    function listChapter(uint256 bucketId, uint256 chapterGroupId, uint256 price) public onlyNovelExist(bucketId) onlyBucketOwner(bucketId) onlyGroupOwner(chapterGroupId) {
+    function listChapter(uint256 novelGroupId, uint256 chapterGroupId, uint256 price) public onlyNovelExist(novelGroupId) onlyGroupOwner(chapterGroupId) {
         // the owner need to approve the Novel contract to update the group
         require(IGnfdAccessControl(_GROUP_HUB).hasRole(ROLE_UPDATE, msg.sender, address(this)), "Novel: no grant");
         require(prices[chapterGroupId] == 0, "Novel: already listed");
         require(price > 0, "Novel: invalid price");
 
-        novels[bucketId].chapterGroupIds.push(chapterGroupId);
+        novels[novelGroupId].chapterGroupIds.push(chapterGroupId);
         prices[chapterGroupId] = price;
-        emit List(msg.sender, bucketId, chapterGroupId, price);
+        emit List(msg.sender, novelGroupId, chapterGroupId, price);
     }
 
     function setPrice(uint256 groupId, uint256 newPrice) external onlyGroupOwner(groupId) {
@@ -139,22 +130,22 @@ contract Novel is ReentrancyGuard, AccessControl, GroupApp {
         emit PriceUpdated(msg.sender, groupId, newPrice);
     }
 
-    function delist(uint256 bucketId, uint256 groupId) external onlyNovelExist(bucketId) onlyBucketOwner(bucketId) {
-        require(prices[groupId] > 0, "Novel: not listed");
+    function delist(uint256 novelGroupId, uint256 chapterGroupId) external onlyNovelExist(novelGroupId) onlyGroupOwner(chapterGroupId) {
+        require(prices[chapterGroupId] > 0, "Novel: not listed");
 
-        delete prices[groupId];
+        delete prices[chapterGroupId];
         bool chapterDelist = false;
-        for (uint256 i = 0; i < novels[bucketId].chapterGroupIds.length; ++i) {
-            if (novels[bucketId].chapterGroupIds[i] == groupId) {
-                novels[bucketId].chapterGroupIds[i] = novels[bucketId].chapterGroupIds[novels[bucketId].chapterGroupIds.length - 1];
-                novels[bucketId].chapterGroupIds.pop();
+        for (uint256 i = 0; i < novels[novelGroupId].chapterGroupIds.length; ++i) {
+            if (novels[novelGroupId].chapterGroupIds[i] == chapterGroupId) {
+                novels[novelGroupId].chapterGroupIds[i] = novels[novelGroupId].chapterGroupIds[novels[novelGroupId].chapterGroupIds.length - 1];
+                novels[novelGroupId].chapterGroupIds.pop();
                 chapterDelist = true;
                 break;
             }
         }
         require(chapterDelist, "chapter not found");
 
-        emit Delist(msg.sender, groupId);
+        emit Delist(msg.sender, chapterGroupId);
     }
 
     function buy(uint256 groupId, address refundAddress) external payable {
