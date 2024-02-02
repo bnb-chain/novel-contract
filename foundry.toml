@@ -1,0 +1,17 @@
+[profile.default]
+src = 'contracts'
+out = 'out'
+libs = ['lib', "node_modules"]
+
+[fmt]
+line_length = 120
+multiline_func_header = "params_first"
+number_underscore = "thousands"
+
+[fuzz]
+runs = 10
+
+[rpc_endpoints]
+bsc = "https://bsc-dataseed1.binance.org/"
+bsc-test = "${RPC_BSC_TESTNET}"
+test = "${RPC_TEST}"
